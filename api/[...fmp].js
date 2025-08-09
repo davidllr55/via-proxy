@@ -1,33 +1,30 @@
-// Proxy para FMP: reenvía /api/* a https://financialmodelingprep.com/api/v3/*
-// Añade ?apikey= desde variable de entorno y permite CORS.
+// Edge Function: proxy a FinancialModelingPrep
+export const runtime = 'edge';
 
-export default async function handler(req, res) {
-  // CORS
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  if (req.method === "OPTIONS") return res.status(200).end();
+export default async function handler(req) {
+  const reqUrl = new URL(req.url);
 
-  try {
-    const { fmp = [], ...rest } = req.query;
-    const path = Array.isArray(fmp) ? fmp.join("/") : String(fmp || "");
-    const url = new URL(`https://financialmodelingprep.com/api/v3/${path}`);
+  // todo lo que venga tras /api/ lo usamos como ruta hacia FMP
+  const path = reqUrl.pathname.replace(/^\/api\//, '');
+  const target = new URL(`https://financialmodelingprep.com/api/v3/${path}`);
 
-    // Copia todos los query params (period, limit, symbol, etc.)
-    for (const [k, v] of Object.entries(rest)) {
-      url.searchParams.append(k, String(v));
+  // copia todos los query params (symbol, period, limit, etc.)
+  reqUrl.searchParams.forEach((v, k) => target.searchParams.set(k, v));
+
+  // añade tu API key desde la variable de entorno de Vercel
+  target.searchParams.set('apikey', process.env.FMP_API_KEY || '');
+
+  const upstream = await fetch(target.toString(), {
+    headers: { accept: 'application/json' }
+  });
+
+  const body = await upstream.text();
+
+  return new Response(body, {
+    status: upstream.status,
+    headers: {
+      'content-type': upstream.headers.get('content-type') || 'application/json',
+      'access-control-allow-origin': '*'
     }
-
-    // Añade tu API key
-    url.searchParams.set("apikey", process.env.FMP_API_KEY);
-
-    const upstream = await fetch(url.toString(), { headers: { accept: "application/json" } });
-    const text = await upstream.text();
-
-    res.status(upstream.status);
-    res.setHeader("Content-Type", upstream.headers.get("content-type") || "application/json");
-    return res.send(text);
-  } catch (err) {
-    return res.status(500).json({ error: "proxy_error", details: String(err) });
-  }
+  });
 }
