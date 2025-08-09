@@ -1,5 +1,5 @@
 {
   "functions": {
-    "api/[...fmp].js": { "runtime": "nodejs18.x" }
+    "api/[...fmp].js": { "runtime": "nodejs22.x" }
   }
 }
